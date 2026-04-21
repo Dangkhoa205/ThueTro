@@ -1,0 +1,253 @@
+
+CREATE TABLE dbo.Users (
+    UserId          BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Email           NVARCHAR(255) NULL UNIQUE,
+    Phone           NVARCHAR(30)  NULL UNIQUE,
+    PasswordHash    NVARCHAR(500) NOT NULL,
+    FullName        NVARCHAR(150) NULL,
+    AvatarUrl       NVARCHAR(1000) NULL,
+    Gender          NVARCHAR(20) NULL,
+    Dob             DATE NULL,
+    CccdNumber      NVARCHAR(30) NULL,        
+    IsActive        BIT NOT NULL DEFAULT 1,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+
+CREATE TABLE dbo.Roles (
+    RoleId      SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code        NVARCHAR(50) NOT NULL UNIQUE,  -- ADMIN, TENANT, LANDLORD, STUDENT, SHOP
+    Name        NVARCHAR(100) NOT NULL
+);
+
+CREATE TABLE dbo.UserRoles (
+    UserId  BIGINT NOT NULL,
+    RoleId  SMALLINT NOT NULL,
+    CONSTRAINT PK_UserRoles PRIMARY KEY (UserId, RoleId),
+    CONSTRAINT FK_UserRoles_Users FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE,
+    CONSTRAINT FK_UserRoles_Roles FOREIGN KEY (RoleId) REFERENCES dbo.Roles(RoleId)
+);
+
+
+CREATE TABLE dbo.Universities (
+    UniversityId    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Name            NVARCHAR(255) NOT NULL,
+    City            NVARCHAR(100) NULL,
+    Address         NVARCHAR(255) NULL,
+    Lat             DECIMAL(10,7) NULL,
+    Lng             DECIMAL(10,7) NULL
+);
+
+CREATE TABLE dbo.StudentVerifications (
+    StudentVerifyId BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId          BIGINT NOT NULL UNIQUE,
+    UniversityId    BIGINT NULL,
+    StudentCode     NVARCHAR(50) NULL,
+    CccdVerified    BIT NOT NULL DEFAULT 0,
+    Status          NVARCHAR(20) NOT NULL DEFAULT N'PENDING', 
+    Note            NVARCHAR(1000) NULL,
+    VerifiedAt      DATETIME2 NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_StudentVerify_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE,
+    CONSTRAINT FK_StudentVerify_Uni FOREIGN KEY (UniversityId) REFERENCES dbo.Universities(UniversityId) ON DELETE SET NULL
+);
+
+
+CREATE TABLE dbo.Properties (
+    PropertyId      BIGINT IDENTITY(1,1) PRIMARY KEY,
+    LandlordId      BIGINT NOT NULL,
+    Title           NVARCHAR(255) NOT NULL,
+    [Description]   NVARCHAR(MAX) NULL,
+    AddressLine     NVARCHAR(255) NOT NULL,
+    Ward            NVARCHAR(100) NULL,
+    District        NVARCHAR(100) NULL,
+    City            NVARCHAR(100) NULL,
+    Lat             DECIMAL(10,7) NULL,
+    Lng             DECIMAL(10,7) NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Properties_Landlord FOREIGN KEY (LandlordId) REFERENCES dbo.Users(UserId)
+);
+
+CREATE TABLE dbo.RoomStatus (
+    RoomStatusId    SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE,   
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.Rooms (
+    RoomId          BIGINT IDENTITY(1,1) PRIMARY KEY,
+    PropertyId      BIGINT NOT NULL,
+    RoomCode        NVARCHAR(50) NULL,
+    PriceMonth      BIGINT NOT NULL,
+    DepositAmount   BIGINT NOT NULL DEFAULT 0,
+    AreaM2          DECIMAL(6,2) NULL,
+    MaxTenants      INT NOT NULL DEFAULT 1,
+    HasPrivateWC    BIT NOT NULL DEFAULT 0,
+    RoomStatusId    SMALLINT NOT NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    UpdatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Rooms_Property FOREIGN KEY (PropertyId) REFERENCES dbo.Properties(PropertyId) ON DELETE CASCADE,
+    CONSTRAINT FK_Rooms_Status FOREIGN KEY (RoomStatusId) REFERENCES dbo.RoomStatus(RoomStatusId),
+    CONSTRAINT CK_Rooms_Price CHECK (PriceMonth >= 0),
+    CONSTRAINT CK_Rooms_Deposit CHECK (DepositAmount >= 0),
+    CONSTRAINT CK_Rooms_MaxTenants CHECK (MaxTenants >= 1)
+);
+
+CREATE TABLE dbo.Amenities (
+    AmenityId   BIGINT IDENTITY(1,1) PRIMARY KEY,
+    Name        NVARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE dbo.RoomAmenities (
+    RoomId      BIGINT NOT NULL,
+    AmenityId   BIGINT NOT NULL,
+    CONSTRAINT PK_RoomAmenities PRIMARY KEY (RoomId, AmenityId),
+    CONSTRAINT FK_RoomAmenities_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId) ON DELETE CASCADE,
+    CONSTRAINT FK_RoomAmenities_Amenity FOREIGN KEY (AmenityId) REFERENCES dbo.Amenities(AmenityId)
+);
+
+CREATE TABLE dbo.RoomPhotos (
+    PhotoId     BIGINT IDENTITY(1,1) PRIMARY KEY,
+    RoomId      BIGINT NOT NULL,
+    Url         NVARCHAR(1000) NOT NULL,
+    SortOrder   INT NOT NULL DEFAULT 0,
+    CONSTRAINT FK_RoomPhotos_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId) ON DELETE CASCADE
+);
+
+CREATE TABLE dbo.Favorites (
+    UserId      BIGINT NOT NULL,
+    RoomId      BIGINT NOT NULL,
+    CreatedAt   DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT PK_Favorites PRIMARY KEY (UserId, RoomId),
+    CONSTRAINT FK_Favorites_User FOREIGN KEY (UserId) REFERENCES dbo.Users(UserId) ON DELETE CASCADE,
+    CONSTRAINT FK_Favorites_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId) ON DELETE CASCADE
+);
+
+
+CREATE TABLE dbo.RequestStatus (
+    RequestStatusId SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE,   -- PENDING/APPROVED/REJECTED/CANCELLED
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.RentalRequests (
+    RequestId       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    RoomId          BIGINT NOT NULL,
+    TenantId        BIGINT NOT NULL,
+    Message         NVARCHAR(2000) NULL,
+    MoveInDate      DATE NULL,
+    RequestStatusId SMALLINT NOT NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    DecidedAt       DATETIME2 NULL,
+    CONSTRAINT FK_Requests_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId) ON DELETE CASCADE,
+    CONSTRAINT FK_Requests_Tenant FOREIGN KEY (TenantId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Requests_Status FOREIGN KEY (RequestStatusId) REFERENCES dbo.RequestStatus(RequestStatusId)
+);
+
+CREATE TABLE dbo.LeaseStatus (
+    LeaseStatusId   SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE,   
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.Leases (
+    LeaseId         BIGINT IDENTITY(1,1) PRIMARY KEY,
+    RoomId          BIGINT NOT NULL,
+    LandlordId      BIGINT NOT NULL,
+    TenantId        BIGINT NOT NULL,
+    StartDate       DATE NOT NULL,
+    EndDate         DATE NULL,
+    RentMonth       BIGINT NOT NULL,
+    DepositAmount   BIGINT NOT NULL DEFAULT 0,
+    LeaseStatusId   SMALLINT NOT NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Leases_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId),
+    CONSTRAINT FK_Leases_Landlord FOREIGN KEY (LandlordId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Leases_Tenant FOREIGN KEY (TenantId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Leases_Status FOREIGN KEY (LeaseStatusId) REFERENCES dbo.LeaseStatus(LeaseStatusId),
+    CONSTRAINT CK_Leases_Rent CHECK (RentMonth >= 0),
+    CONSTRAINT CK_Leases_Deposit CHECK (DepositAmount >= 0)
+);
+
+CREATE TABLE dbo.PaymentStatus (
+    PaymentStatusId SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE,   
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.PaymentTypes (
+    PaymentTypeId   SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE,   
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.LeasePayments (
+    PaymentId       BIGINT IDENTITY(1,1) PRIMARY KEY,
+    LeaseId         BIGINT NOT NULL,
+    PayerId         BIGINT NOT NULL,
+    Amount          BIGINT NOT NULL,
+    PaymentTypeId   SMALLINT NOT NULL,
+    Method          NVARCHAR(30) NULL,              
+    PaymentStatusId SMALLINT NOT NULL,
+    PaidAt          DATETIME2 NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Payments_Lease FOREIGN KEY (LeaseId) REFERENCES dbo.Leases(LeaseId) ON DELETE CASCADE,
+    CONSTRAINT FK_Payments_Payer FOREIGN KEY (PayerId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Payments_Type FOREIGN KEY (PaymentTypeId) REFERENCES dbo.PaymentTypes(PaymentTypeId),
+    CONSTRAINT FK_Payments_Status FOREIGN KEY (PaymentStatusId) REFERENCES dbo.PaymentStatus(PaymentStatusId),
+    CONSTRAINT CK_Payments_Amount CHECK (Amount > 0)
+);
+
+
+CREATE TABLE dbo.ChatThreads (
+    ThreadId    BIGINT IDENTITY(1,1) PRIMARY KEY,
+    RoomId      BIGINT NULL,
+    CreatedAt   DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Threads_Room FOREIGN KEY (RoomId) REFERENCES dbo.Rooms(RoomId) ON DELETE SET NULL
+);
+
+CREATE TABLE dbo.ChatMessages (
+    MessageId   BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ThreadId    BIGINT NOT NULL,
+    SenderId    BIGINT NOT NULL,
+    [Message]   NVARCHAR(MAX) NOT NULL,
+    CreatedAt   DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    CONSTRAINT FK_Messages_Thread FOREIGN KEY (ThreadId) REFERENCES dbo.ChatThreads(ThreadId) ON DELETE CASCADE,
+    CONSTRAINT FK_Messages_Sender FOREIGN KEY (SenderId) REFERENCES dbo.Users(UserId)
+);
+
+-- ============================================
+-- 6) REPORTS / COMPLAINTS
+-- ============================================
+CREATE TABLE dbo.ReportStatus (
+    ReportStatusId  SMALLINT IDENTITY(1,1) PRIMARY KEY,
+    Code            NVARCHAR(20) NOT NULL UNIQUE, 
+    Name            NVARCHAR(50) NOT NULL
+);
+
+CREATE TABLE dbo.Reports (
+    ReportId        BIGINT IDENTITY(1,1) PRIMARY KEY,
+    ReporterId      BIGINT NOT NULL,
+    TargetType      NVARCHAR(30) NOT NULL,         
+    TargetId        BIGINT NOT NULL,
+    Reason          NVARCHAR(50) NULL,
+    [Description]   NVARCHAR(2000) NULL,
+    ReportStatusId  SMALLINT NOT NULL,
+    AdminId         BIGINT NULL,
+    CreatedAt       DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+    ResolvedAt      DATETIME2 NULL,
+    CONSTRAINT FK_Reports_Reporter FOREIGN KEY (ReporterId) REFERENCES dbo.Users(UserId),
+    CONSTRAINT FK_Reports_Status FOREIGN KEY (ReportStatusId) REFERENCES dbo.ReportStatus(ReportStatusId),
+    CONSTRAINT FK_Reports_Admin FOREIGN KEY (AdminId) REFERENCES dbo.Users(UserId)
+);
+
+
+CREATE INDEX IX_Rooms_PropertyId ON dbo.Rooms(PropertyId);
+CREATE INDEX IX_Rooms_PriceMonth ON dbo.Rooms(PriceMonth);
+CREATE INDEX IX_Properties_CityDistrict ON dbo.Properties(City, District);
+CREATE INDEX IX_RentalRequests_RoomId ON dbo.RentalRequests(RoomId);
+CREATE INDEX IX_RentalRequests_TenantId ON dbo.RentalRequests(TenantId);
+CREATE INDEX IX_Leases_RoomId ON dbo.Leases(RoomId);
+CREATE INDEX IX_ChatMessages_ThreadIdCreatedAt ON dbo.ChatMessages(ThreadId, CreatedAt);
+CREATE INDEX IX_Reports_StatusCreatedAt ON dbo.Reports(ReportStatusId, CreatedAt);
